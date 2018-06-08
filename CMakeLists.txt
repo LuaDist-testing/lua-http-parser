@@ -1,0 +1,60 @@
+cmake_minimum_required(VERSION 2.8)
+
+project(lua-http-parser C)
+
+set(BUILD_SHARED_LIBS TRUE)
+
+set(INSTALL_CMOD share/lua/cmod CACHE PATH "Directory to install Lua binary modules (configure lua via LUA_CPATH)")
+
+## Lua 5.1.x
+include(FindLua51)
+if(!${LUA51_FOUND})
+    message(FATAL_ERROR "The FindLua51 module could not find lua :-(")
+endif()
+
+
+set(WARN_CFLAGS "-Wall -Wextra -Wshadow -W -pedantic -Wno-overlength-strings")
+if(CMAKE_COMPILER_IS_GNUCC)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pipe ${WARN_CFLAGS} -std=gnu99 -fgnu89-inline")
+    set(CMAKE_C_FLAGS_RELEASE        "${CMAKE_C_FLAGS_RELEASE}     -O3 -march=native -g")
+    set(CMAKE_C_FLAGS_DEBUG          "${CMAKE_C_FLAGS_DEBUG}       -O0 -g")
+    set(CMAKE_C_FLAGS_PROFILE        "${CMAKE_C_FLAGS_PROFILE}     -O2 -g -DNDEBUG")
+    set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_WITHDEBINFO} -O2 -g")
+endif(CMAKE_COMPILER_IS_GNUCC)
+
+## setup git submodules
+
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/http-parser/http_parser.c")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git/")
+        execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                        COMMAND git submodule init)
+        execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                        COMMAND git submodule update)
+    else()
+        execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                        COMMAND git clone "git://github.com/joyent/http-parser.git")
+    endif()
+endif()
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/http-parser
+                    ${LUA_INCLUDE_DIR})
+
+add_library(parser MODULE lua-http-parser.c http-parser/http_parser.c)
+target_link_libraries(parser ${LUA_LIBRARIES})
+set_target_properties(parser PROPERTIES PREFIX "")
+set_target_properties(parser PROPERTIES COMPILE_FLAGS "${CFLAGS}")
+set_target_properties(parser PROPERTIES OUTPUT_NAME parser)
+
+install(TARGETS parser
+        DESTINATION "${INSTALL_CMOD}/http")
+
+
+## Setup test stuff
+include(CTest)
+add_test(test ${LUA} ${CMAKE_CURRENT_SOURCE_DIR}/test.lua ${CMAKE_CURRENT_SOURCE_DIR}/ ${CMAKE_CURRENT_BINARY_DIR}/)
+#add_test(benchmark ${LUA} ${CMAKE_CURRENT_SOURCE_DIR}/benchmark.lua ${CMAKE_CURRENT_SOURCE_DIR}/ ${CMAKE_CURRENT_BINARY_DIR}/)
+set_tests_properties(test
+                     PROPERTIES
+                     FAIL_REGULAR_EXPRESSION
+                     "not ok")
